@@ -23,7 +23,8 @@ int main(int argc, char **argv)
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    SDL_Window *window = SDL_CreateWindow("KH PAX Viewer", 1600, 900, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+    SDL_Window *window = SDL_CreateWindow("KH PAX Viewer " PAX_VERSION_STRING, 1600, 900,
+                                          SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
     SDL_GLContext context = window != nullptr ? SDL_GL_CreateContext(window) : nullptr;
     const char *missing = nullptr;
     if (context == nullptr || !pax::gl.load(&missing)) {

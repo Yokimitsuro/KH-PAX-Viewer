@@ -18,8 +18,3 @@ jobs:
         with:
           name: KH-PAX-Viewer
           path: build/Release/KH PAX Viewer.exe
-      - name: Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: build/Release/KH PAX Viewer.exe

@@ -1,7 +1,10 @@
 # KH PAX Viewer: plays KINGDOM HEARTS effects (KH2's .pax, KH1's and Re:Chain of Memories' .dpx) from files the
 # user extracted from their own copy of the games. Nothing of the games is in this repository.
 cmake_minimum_required(VERSION 3.25)
-project(kh_pax_viewer C CXX)
+project(kh_pax_viewer VERSION 0.1.0 LANGUAGES C CXX)
+if(WIN32)
+    enable_language(RC) # the icon and version (resources/viewer.rc)
+endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -51,12 +54,18 @@ target_include_directories(pax-core PUBLIC src)
 target_link_libraries(pax-core PUBLIC pax-player SDL3::SDL3-static)
 
 add_executable(kh-pax-viewer WIN32 src/main.cpp src/app.cpp)
+if(WIN32)
+    target_sources(kh-pax-viewer PRIVATE resources/viewer.rc)
+endif()
 target_link_libraries(kh-pax-viewer PRIVATE pax-core pax-imgui)
+target_compile_definitions(kh-pax-viewer PRIVATE
+    PAX_VERSION_MAJOR=${PROJECT_VERSION_MAJOR} PAX_VERSION_MINOR=${PROJECT_VERSION_MINOR}
+    PAX_VERSION_PATCH=${PROJECT_VERSION_PATCH} PAX_VERSION_STRING="${PROJECT_VERSION}")
 set_target_properties(kh-pax-viewer PROPERTIES OUTPUT_NAME "KH PAX Viewer")
 
 if(MSVC)
     foreach(t pax-player pax-core kh-pax-viewer)
-        target_compile_options(${t} PRIVATE /W4 /utf-8 /permissive-)
+        target_compile_options(${t} PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:/W4;/utf-8;/permissive->")
     endforeach()
 endif()
 

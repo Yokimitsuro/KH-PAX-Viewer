@@ -17,6 +17,8 @@ KINGDOM HEARTS II's own effect interpreter, all 130 commands KH2's effects use.
 
 No game files are included or downloaded. You need the games and a tool that extracts their files.
 
+AI-assisted coding tools were used to help make this possible.
+
 ## Features
 
 - Open files, or a folder searched with its subfolders; the folder opened is loaded again at the next start.
