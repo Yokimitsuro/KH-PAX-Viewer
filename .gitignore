@@ -1,0 +1,4 @@
+/build/
+/Extract/
+*.user
+.vs/
