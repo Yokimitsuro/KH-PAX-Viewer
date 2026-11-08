@@ -129,7 +129,6 @@ void App::open(std::vector<std::filesystem::path> paths)
     select({});
     library_.clear();
     sources_.clear();
-    sources_seen_ = 0;
     renderer_.forget();
     library_.open(std::move(paths), deep_);
     save_settings();
@@ -326,7 +325,7 @@ void App::tree()
     if (library_.busy())
         ImGui::Text("Loading... %d files looked at, %zu with effects", library_.seen(), sources_.size());
     else
-        ImGui::Text("%zu files with effects", sources_.size());
+        ImGui::Text("%zu file%s with effects", sources_.size(), sources_.size() == 1 ? "" : "s");
     ImGui::SetNextItemWidth(-1);
     ImGui::InputTextWithHint("##filter", "Filter by name", filter_, sizeof filter_);
     ImGui::Separator();
@@ -500,16 +499,13 @@ void App::frame(int width, int height)
         if (!q.empty())
             open(std::move(q));
     }
-    // what the library found, taken when it changes
+    // what the library found, taken when it changes (a load may end before the first frame); busy read first, so
+    // a finished load's last file is in the copy
     const bool busy = library_.busy();
-    if (busy || was_busy_) {
-        auto now = library_.sources();
-        if (now.size() != sources_seen_ || !busy) {
-            sources_ = std::move(now);
-            sources_seen_ = sources_.size();
-        }
+    if (const unsigned changes = library_.changes(); changes != changes_seen_) {
+        changes_seen_ = changes;
+        sources_ = library_.sources();
     }
-    was_busy_ = busy;
     if (!busy && !wanted_.empty()) {
         for (std::size_t i = 0; i < sources_.size(); ++i)
             if (lower(sources_[i].name).find(wanted_) != std::string::npos) {

@@ -50,8 +50,7 @@ private:
     Renderer renderer_;
     Orbit orbit_;
     std::vector<Source> sources_;
-    std::size_t sources_seen_ = 0;
-    bool was_busy_ = false;
+    unsigned changes_seen_ = ~0u; // the library's changes() when sources_ was taken
 
     Pick pick_;
     std::unique_ptr<kh2::EffectInstance> fx_;

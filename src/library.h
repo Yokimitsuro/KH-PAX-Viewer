@@ -52,6 +52,7 @@ public:
     void open(std::vector<std::filesystem::path> paths, bool deep);
     bool busy() const { return busy_; }
     int seen() const { return seen_; } // files looked at so far
+    unsigned changes() const { return changes_; } // counts each change to what was found
     // A copy of what has been found (cheap: the blocks are shared).
     std::vector<Source> sources() const;
     std::vector<kh2::EffectPicture> resident(Game g) const;
@@ -67,6 +68,7 @@ private:
     std::thread worker_;
     std::atomic<bool> busy_{false}, cancel_{false};
     std::atomic<int> seen_{0};
+    std::atomic<unsigned> changes_{0};
 };
 
 } // namespace pax

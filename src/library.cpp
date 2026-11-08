@@ -167,6 +167,7 @@ void Library::clear()
     for (auto &r : resident_)
         r.clear();
     seen_ = 0;
+    ++changes_;
 }
 
 void Library::open(std::vector<std::filesystem::path> paths, bool deep)
@@ -251,6 +252,7 @@ void Library::add_file(const std::filesystem::path &file, const std::filesystem:
     s.game = game_of(file, s.effects, std::memcmp(head, "PAX_", 4) == 0);
     std::lock_guard<std::mutex> l(lock_);
     sources_.push_back(std::move(s));
+    ++changes_;
 }
 
 } // namespace pax
