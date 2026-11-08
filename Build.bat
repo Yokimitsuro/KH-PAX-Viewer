@@ -18,7 +18,10 @@ cmake -S "%HERE%." -B "%HERE%build" -G Ninja -DCMAKE_BUILD_TYPE=Release || exit 
 cmake --build "%HERE%build" || exit /b 1
 ctest --test-dir "%HERE%build" --output-on-failure || exit /b 1
 if not exist "%HERE%build\Release" mkdir "%HERE%build\Release"
-copy /y "%HERE%build\KH PAX Viewer.exe" "%HERE%build\Release\" >nul
+copy /y "%HERE%build\KH PAX Viewer.exe" "%HERE%build\Release\" >nul || (
+    echo Could not copy into build\Release: close KH PAX Viewer if it is running, then build again.
+    exit /b 1
+)
 echo.
 echo Built: "%HERE%build\Release\KH PAX Viewer.exe"
 endlocal
