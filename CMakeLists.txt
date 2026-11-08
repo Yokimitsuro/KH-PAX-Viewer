@@ -1,7 +1,7 @@
 # KH PAX Viewer: plays KINGDOM HEARTS effects (KH2's .pax, KH1's and Re:Chain of Memories' .dpx) from files the
 # user extracted from their own copy of the games. Nothing of the games is in this repository.
 cmake_minimum_required(VERSION 3.25)
-project(kh_pax_viewer VERSION 0.1.0 LANGUAGES C CXX)
+project(kh_pax_viewer VERSION 0.1.1 LANGUAGES C CXX)
 if(WIN32)
     enable_language(RC) # the icon and version (resources/viewer.rc)
 endif()
