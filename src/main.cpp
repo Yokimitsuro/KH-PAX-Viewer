@@ -39,8 +39,10 @@ int main(int argc, char **argv)
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO &io = ImGui::GetIO();
-    io.IniFilename = nullptr; // the layout is fixed; the settings are the viewer's own
+    io.IniFilename = nullptr; // the settings are the viewer's own (settings.ini)
     ImGui::StyleColorsDark();
+    ImGui::GetStyle().FontSizeBase = 16.0F; // ImGui's scalable font: sharp at any text size chosen
+    io.Fonts->AddFontDefaultVector();
     ImGui_ImplSDL3_InitForOpenGL(window, context);
     ImGui_ImplOpenGL3_Init("#version 330 core");
 

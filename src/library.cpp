@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cstring>
 #include <fstream>
 #include <iterator>
@@ -41,10 +42,19 @@ bool dpx_at(const std::uint8_t *d, std::size_t size, std::size_t at)
     return true;
 }
 
+std::uint64_t fnv1a(const std::uint8_t *data, std::size_t size)
+{
+    std::uint64_t h = 0xcbf29ce484222325ull;
+    for (std::size_t i = 0; i < size; ++i)
+        h = (h ^ data[i]) * 0x100000001b3ull;
+    return h;
+}
+
 Effect read_one(const std::uint8_t *data, std::size_t size, const std::string &label)
 {
     Effect e;
     e.label = label;
+    e.bytes = fnv1a(data, size);
     try {
         for (auto &b : kh2::read_effect(data, size))
             e.blocks.push_back(std::make_shared<const kh2::EffectBlock>(std::move(b)));
@@ -74,14 +84,38 @@ std::string hex(std::size_t v)
 
 } // namespace
 
-const char *game_name(Game g)
+void add_source(std::vector<Source> &sources, std::map<std::string, std::vector<std::size_t>> &by_key, Source s)
 {
-    switch (g) {
-    case Game::KH1: return "KINGDOM HEARTS";
-    case Game::KH2: return "KINGDOM HEARTS II";
-    case Game::ReCoM: return "Re:Chain of Memories";
-    default: return "Other";
+    auto &same_name = by_key[s.naming.key];
+    for (const std::size_t i : same_name) {
+        Source &kept = sources[i];
+        if (kept.effects.size() != s.effects.size())
+            continue;
+        bool same = true;
+        for (std::size_t e = 0; e < s.effects.size() && same; ++e)
+            same = kept.effects[e].bytes == s.effects[e].bytes && kept.effects[e].label == s.effects[e].label;
+        if (!same)
+            continue;
+        // the same copy again (another extraction holds it too): listed once
+        if (s.naming.copy == kept.naming.copy ||
+            std::find(kept.copies.begin(), kept.copies.end(), s.naming.copy) != kept.copies.end())
+            return;
+        if (s.naming.copy == "us") { // the copy shown: KINGDOM HEARTS II's own (English) one
+            auto copies = std::move(kept.copies);
+            copies.insert(copies.begin(), s.naming.copy);
+            const auto effects = std::move(kept.effects); // the blocks already shared out stay the ones in use
+            kept = std::move(s);
+            kept.effects = effects;
+            kept.copies = std::move(copies);
+        } else {
+            kept.copies.push_back(s.naming.copy);
+        }
+        return;
     }
+    if (s.copies.empty() && !s.naming.copy.empty())
+        s.copies.push_back(s.naming.copy);
+    same_name.push_back(sources.size());
+    sources.push_back(std::move(s));
 }
 
 std::vector<Effect> effects_in(const std::uint8_t *data, std::size_t size, bool deep, const std::string &label)
@@ -132,7 +166,7 @@ std::vector<kh2::EffectPicture> resident_pictures(const std::uint8_t *data, std:
     }
 }
 
-Game game_of(const std::filesystem::path &path, const std::vector<Effect> &effects, bool pax)
+Game game_of(const std::filesystem::path &path, const std::vector<Effect> &effects, bool kh2)
 {
     for (const auto &part : path) {
         const std::string p = lower(part.string());
@@ -143,7 +177,7 @@ Game game_of(const std::filesystem::path &path, const std::vector<Effect> &effec
         if (p.rfind("recom", 0) == 0)
             return Game::ReCoM;
     }
-    if (pax)
+    if (kh2)
         return Game::KH2;
     (void)effects;
     return Game::Unknown;
@@ -164,6 +198,7 @@ void Library::clear()
     cancel_ = false;
     std::lock_guard<std::mutex> g(lock_);
     sources_.clear();
+    by_key_.clear();
     for (auto &r : resident_)
         r.clear();
     seen_ = 0;
@@ -190,8 +225,52 @@ std::vector<kh2::EffectPicture> Library::resident(Game g) const
     return resident_[int(g)];
 }
 
+bool passed_over(const std::filesystem::path &p, bool folder)
+{
+    if (folder) // the collection's HD pictures and sounds beside each extraction's original files
+        return lower(p.filename().string()) == "remastered" &&
+               lower(p.parent_path().filename().string()).ends_with(".hed_out");
+    const std::string extension = lower(p.extension().string());
+    return extension == ".dds" || extension == ".png" || extension == ".scd";
+}
+
+namespace {
+
+// Whether a BAR's entries may hold an effect (an entry beginning as a PAX, a DPX or another BAR), from its
+// directory and each entry's first 16 bytes: the whole file is read only then.
+bool bar_may_hold_effects(std::ifstream &in, std::uintmax_t size)
+{
+    std::uint8_t head[16] = {};
+    in.seekg(0);
+    if (!in.read(reinterpret_cast<char *>(head), 16))
+        return false;
+    const std::uint32_t n = u32(head + 4);
+    if (16 + 16 * std::uintmax_t(n) > size)
+        return true; // a directory past the end: left to the reading to refuse
+    std::vector<std::uint8_t> entries(16 * std::size_t(n));
+    if (n != 0 && !in.read(reinterpret_cast<char *>(entries.data()), std::streamsize(entries.size())))
+        return false;
+    for (std::uint32_t i = 0; i < n; ++i) {
+        const std::uint8_t *e = entries.data() + 16 * std::size_t(i);
+        const std::uintmax_t at = u32(e + 8), length = u32(e + 12);
+        if (at >= size || length > size - at || length < 16)
+            continue;
+        std::uint8_t start[16] = {};
+        in.seekg(std::streamoff(at));
+        if (!in.read(reinterpret_cast<char *>(start), 16))
+            return true;
+        if (std::memcmp(start, "PAX_", 4) == 0 || std::memcmp(start, "BAR\x01", 4) == 0 ||
+            (u32(start) == 0x82 && u32(start + 4) == 0 && u32(start + 8) == 0))
+            return true;
+    }
+    return false;
+}
+
+} // namespace
+
 void Library::run(std::vector<std::filesystem::path> paths, bool deep)
 {
+    const auto started = std::chrono::steady_clock::now();
     for (const auto &p : paths) {
         std::error_code ec;
         if (std::filesystem::is_directory(p, ec)) {
@@ -200,32 +279,43 @@ void Library::run(std::vector<std::filesystem::path> paths, bool deep)
                  it != std::filesystem::recursive_directory_iterator() && !cancel_; it.increment(ec)) {
                 if (ec)
                     break;
-                if (it->is_regular_file(ec))
-                    add_file(it->path(), p, deep);
+                if (it->is_directory(ec)) {
+                    if (!deep && passed_over(it->path(), true))
+                        it.disable_recursion_pending();
+                    continue;
+                }
+                if (!it->is_regular_file(ec) || (!deep && passed_over(it->path(), false)))
+                    continue;
+                const auto size = it->file_size(ec); // from the folder's listing: no opening
+                add_file(it->path(), p, deep, ec ? 0 : size);
             }
         } else {
-            add_file(p, p.parent_path(), deep);
+            add_file(p, p.parent_path(), deep, std::filesystem::file_size(p, ec));
         }
         if (cancel_)
             break;
     }
+    seconds_ = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
     busy_ = false;
 }
 
-void Library::add_file(const std::filesystem::path &file, const std::filesystem::path &root, bool deep)
+void Library::add_file(const std::filesystem::path &file, const std::filesystem::path &root, bool deep,
+                       std::uintmax_t size)
 {
     ++seen_;
     std::error_code ec;
-    const auto size = std::filesystem::file_size(file, ec);
-    if (ec || size < 16 || size > (std::uintmax_t(512) << 20))
+    if (size < 16 || size > (std::uintmax_t(512) << 20))
         return;
     std::ifstream in(file, std::ios::binary);
     std::uint8_t head[4] = {};
     in.read(reinterpret_cast<char *>(head), 4);
-    const bool known = std::memcmp(head, "PAX_", 4) == 0 || std::memcmp(head, "BAR\x01", 4) == 0 || u32(head) == 0x82 ||
-                       u32(head) == 0x96;
+    const bool bar = std::memcmp(head, "BAR\x01", 4) == 0;
+    const bool known = std::memcmp(head, "PAX_", 4) == 0 || bar || u32(head) == 0x82 || u32(head) == 0x96;
     if (!known && !deep)
         return;
+    if (bar && !deep && !bar_may_hold_effects(in, size))
+        return;
+    in.clear();
     in.seekg(0);
     std::vector<std::uint8_t> data(static_cast<std::size_t>(size));
     in.read(reinterpret_cast<char *>(data.data()), std::streamsize(data.size()));
@@ -249,9 +339,10 @@ void Library::add_file(const std::filesystem::path &file, const std::filesystem:
     s.effects = effects_in(data.data(), data.size(), deep);
     if (s.effects.empty())
         return;
-    s.game = game_of(file, s.effects, std::memcmp(head, "PAX_", 4) == 0);
+    s.game = game_of(file, s.effects, std::memcmp(head, "PAX_", 4) == 0 || std::memcmp(head, "BAR\x01", 4) == 0);
+    s.naming = name_of(s.name, s.game);
     std::lock_guard<std::mutex> l(lock_);
-    sources_.push_back(std::move(s));
+    add_source(sources_, by_key_, std::move(s));
     ++changes_;
 }
 

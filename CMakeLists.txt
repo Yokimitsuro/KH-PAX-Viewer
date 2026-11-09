@@ -49,7 +49,7 @@ target_link_libraries(pax-imgui PUBLIC SDL3::SDL3-static)
 add_library(pax-player STATIC src/player/kh2_effect.cpp)
 target_include_directories(pax-player PUBLIC src/player/include)
 
-add_library(pax-core STATIC src/library.cpp src/gl.cpp src/renderer.cpp src/camera.cpp)
+add_library(pax-core STATIC src/library.cpp src/names.cpp src/gl.cpp src/renderer.cpp src/camera.cpp)
 target_include_directories(pax-core PUBLIC src)
 target_link_libraries(pax-core PUBLIC pax-player SDL3::SDL3-static)
 

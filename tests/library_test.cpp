@@ -4,6 +4,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -105,6 +106,68 @@ int main()
     expect(game_of("D:/kh2_fifth/obj/PRIZE.mdlx", {}, false) == Game::KH2, "KH2 by its folder");
     expect(game_of("D:/Recom/abc.dat", {}, false) == Game::ReCoM, "Re:CoM by its folder");
     expect(game_of("D:/somewhere/x.pax", {}, true) == Game::KH2, "a PAX is KH2's");
+
+    expect(passed_over("D:/dt/kh2_first.hed_out/remastered", true) && !passed_over("D:/mods/remastered", true) &&
+               !passed_over("D:/dt/kh2_first.hed_out/original", true),
+           "an extraction's remastered folder passed over, no other");
+    expect(passed_over("D:/a/b.dds", false) && passed_over("D:/a/b.SCD", false) && !passed_over("D:/a/b.pax", false) &&
+               !passed_over("D:/a/b.anb", false),
+           "pictures and sounds passed over");
+
+    // the names the list shows
+    auto n = name_of("kh2_fifth.hed_out/original/event/effect/tt_event_101.pax", Game::KH2);
+    expect(n.file == "tt_event_101.pax" && n.place == "kh2_fifth.hed_out" && n.folder == "event/effect" &&
+               n.group == "Event effects" && n.section == "Twilight Town" && n.copy.empty(),
+           "a KH2 event effect: its extraction left out, listed under its world");
+    n = name_of("msn/us/AL00_MS101.bar", Game::KH2);
+    const auto fr = name_of("msn/fr/AL00_MS101.bar", Game::KH2);
+    expect(n.group == "Missions" && n.section == "Agrabah" && n.copy == "us" && fr.copy == "fr" && n.key == fr.key,
+           "a mission's language copies: one key, their languages");
+    n = name_of("obj/B_AL020.a.us", Game::KH2);
+    expect(n.group == "Characters and objects" && n.section == "Bosses (B_)" && n.world == "Agrabah" &&
+               n.copy == "us" && n.key == name_of("obj/B_AL020.a.fr", Game::KH2).key &&
+               n.key != name_of("obj/B_AL020.mdlx", Game::KH2).key,
+           "a KH2 object by its letter, its world kept, its .a.<language> copies one key");
+    expect(name_of("obj/G_EB110.a.us", Game::KH2).section == "Other (G_)", "an object of an unknown letter");
+    expect(name_of("worldmap/eft/wp_pc.dpx", Game::KH1).section == "Hollow Bastion" &&
+               name_of("eveffect/tw/tw_000.dpx", Game::KH1).group == "Event effects",
+           "KH1's world codes are its own (pc: Hollow Bastion)");
+    n = name_of("always.dpx", Game::KH1);
+    expect(n.group == "Main folder" && n.section.empty(), "a file in the folder opened");
+    n = name_of("mods/mine/fx.pax", Game::KH2);
+    expect(n.group == "mods/mine folder" && n.section.empty(), "an unknown folder listed by its path");
+    expect(name_of("limit/fm/donald_wi.bar", Game::KH2).section == "Timeless River" &&
+               name_of("magic/BLIZZARD_1.mag", Game::KH2).section.empty() &&
+               name_of("event/effect/mission_end.pax", Game::KH2).section.empty(),
+           "a world only where two letters and digits (or nothing) name one");
+    expect(effect_title("p_ex#0") == "p_ex (entry 0)" &&
+               effect_title("WM_C#14 / wm_c#0") == "WM_C (entry 14) > wm_c (entry 0)" &&
+               effect_title("at 0x40") == "at 0x40",
+           "an effect's place in its file");
+
+    // a language's copy with the same effects is one entry, the "us" copy kept; different effects stay apart
+    {
+        std::vector<Source> sources;
+        std::map<std::string, std::vector<std::size_t>> by_key;
+        const auto make = [&](const char *relative, std::uint64_t bytes) {
+            Source s;
+            s.name = relative;
+            s.game = Game::KH2;
+            s.naming = name_of(relative, Game::KH2);
+            Effect e;
+            e.bytes = bytes;
+            s.effects.push_back(e);
+            return s;
+        };
+        add_source(sources, by_key, make("msn/fr/X.bar", 1));
+        add_source(sources, by_key, make("msn/gr/X.bar", 1));
+        add_source(sources, by_key, make("msn/us/X.bar", 1));
+        add_source(sources, by_key, make("msn/it/X.bar", 2));
+        add_source(sources, by_key, make("kh2_first.hed_out/original/msn/it/X.bar", 2));
+        expect(sources.size() == 2 && sources[0].name == "msn/us/X.bar" && sources[0].copies.size() == 3 &&
+                   sources[0].copies[0] == "us" && sources[1].copies.size() == 1,
+               "language copies merged, the us one shown; a different one and the same file twice");
+    }
 
     if (failures == 0)
         std::printf("library: all checks passed\n");
